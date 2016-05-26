@@ -145,10 +145,7 @@ public class ClientActivity extends Activity {
                 startScan();
             } else if (SCAN_DONE.equals(action)) {
                 Log.i(TAG, "Connecting to " + mDevice.getName());
-                /*
-                 * Make a connection with the device using the special LE-specific
-                 * connectGatt() method, passing in a callback for GATT events
-                 */
+
                 mConnectedGatt = mDevice.connectGatt(getApplicationContext(), false, mGattCallback);
             }
         }
@@ -268,9 +265,6 @@ public class ClientActivity extends Activity {
                 //Register for further updates as notifications
                 gatt.setCharacteristicNotification(characteristic, true);
             }
-
-
-
         }
 
         @Override
@@ -279,10 +273,6 @@ public class ClientActivity extends Activity {
             super.onCharacteristicChanged(gatt, characteristic);
             String packet = characteristic.getStringValue(0);
 
-            //VOVA get update from server
-            //*************************************************************************************
-            Log.i(TAG, "Notification characteristic changed on server.");
-
             Log.i(TAG, "Received packet = " + packet);
 
             Intent intent = DeviceProfile.decode(packet);
@@ -290,10 +280,6 @@ public class ClientActivity extends Activity {
                 Log.d(TAG, "Broadcast " + intent.getAction());
                 sendBroadcast(intent);
             }
-            //*************************************************************************************
         }
     };
-
-
-
 }

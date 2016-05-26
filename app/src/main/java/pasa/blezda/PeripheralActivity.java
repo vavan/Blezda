@@ -239,8 +239,6 @@ public class PeripheralActivity extends Activity {
                             0,
                             value);
                 }
-
-//                notifyConnectedDevices();
             }
         }
     };
@@ -293,6 +291,10 @@ public class PeripheralActivity extends Activity {
         }
     };
 
+
+
+    //Vova. All the rest is UI stuff, can be removed
+
     private Handler mHandler = new Handler();
     private void postStatusMessage(final String message) {
         mHandler.post(new Runnable() {
@@ -313,12 +315,6 @@ public class PeripheralActivity extends Activity {
                 } else {
                     mConnectedDevicesAdapter.remove(device);
                 }
-
-                //Trigger our periodic notification once devices are connected
-//                mHandler.removeCallbacks(mNotifyRunnable);
-//                if (!mConnectedDevices.isEmpty()) {
-//                    mHandler.post(mNotifyRunnable);
-//                }
             }
         });
     }
