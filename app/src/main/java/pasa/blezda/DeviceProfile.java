@@ -60,39 +60,6 @@ public class DeviceProfile {
         }
     }
 
-    public static byte[] getShiftedTimeValue(int timeOffset) {
-        int value = Math.max(0,
-                (int)(System.currentTimeMillis()/1000) - timeOffset);
-        return bytesFromInt(value);
-    }
-
-    public static int unsignedIntFromBytes(byte[] raw) {
-        if (raw.length < 4) throw new IllegalArgumentException("Cannot convert raw data to int");
-
-        return ((raw[0] & 0xFF)
-                + ((raw[1] & 0xFF) << 8)
-                + ((raw[2] & 0xFF) << 16)
-                + ((raw[3] & 0xFF) << 24));
-    }
-
-    public static byte[] bytesFromInt(int value) {
-        //Convert result into raw bytes. GATT APIs expect LE order
-        return ByteBuffer.allocate(4)
-                .order(ByteOrder.LITTLE_ENDIAN)
-                .putInt(value)
-                .array();
-    }
-
-    public static byte getCoomand(BluetoothGattCharacteristic characteristic) {
-        final int value = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16, 0);
-        return (byte)((value & 0xff00) >> 8);
-    }
-    public static byte getArgument(BluetoothGattCharacteristic characteristic) {
-        final int value = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16, 0);
-        return (byte)(value & 0xff);
-    }
-
-
     public static String encode(Intent intent) {
         StringBuffer sb = new StringBuffer();
         int i;
