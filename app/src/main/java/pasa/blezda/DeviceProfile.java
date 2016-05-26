@@ -3,6 +3,9 @@ package pasa.blezda;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothProfile;
+import android.content.Intent;
+import android.os.Bundle;
+import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -22,11 +25,16 @@ public class DeviceProfile {
     public static UUID SERVICE_UUID = UUID.fromString("19aa6498-ddf9-4222-884f-49929427ac59");
     //Read-only characteristic providing number of elapsed seconds since offset
     public static UUID CHARACTERISTIC_COMMAND_UUID = UUID.fromString("2fca450b-26ea-4146-96f7-d04725ab20c5");
-    //Read-write characteristic for current offset timestamp
-//    public static UUID CHARACTERISTIC_OFFSET_UUID = UUID.fromString("9da222a0-e501-4450-bb85-cc72f973ae83");
 
-    //30be097b-e305-43ff-83e4-9531a3319238
-    //30b141f3-ab53-4207-bc2b-6fc2489d2c02
+
+
+    public static final String[] INPUT_INTENTS = {
+            "com.pasa.send"
+    };
+
+    public static final String[] OUTPUT_INTENTS = {
+            "com.pasa.receive"
+    };
 
     public static String getStateDescription(int state) {
         switch (state) {
@@ -82,5 +90,51 @@ public class DeviceProfile {
     public static byte getArgument(BluetoothGattCharacteristic characteristic) {
         final int value = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16, 0);
         return (byte)(value & 0xff);
+    }
+
+
+    public static String encode(Intent intent) {
+        StringBuffer sb = new StringBuffer();
+        int i;
+        for (i = 0; i < DeviceProfile.INPUT_INTENTS.length; i++) {
+            if (intent.getAction().equals(DeviceProfile.INPUT_INTENTS[i]))
+                break;
+        }
+        if (i < DeviceProfile.INPUT_INTENTS.length) {
+            sb.append("" + i + "&");
+            Bundle bundle = intent.getExtras();
+            for (String key : bundle.keySet()) {
+                Object value = bundle.get(key);
+                if (value instanceof String) {
+                    sb.append(key + "&");
+                    sb.append(value + "&");
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    public static Intent decode(String packet) {
+        String[] elements = packet.split("&");
+        Intent intent = null;
+        if (elements.length > 0) {
+            int i = 99999;
+            try {
+                i = Integer.parseInt(elements[0]);
+            } catch(NumberFormatException nfe) {
+            }
+            if (i < DeviceProfile.OUTPUT_INTENTS.length) {
+                intent = new Intent(DeviceProfile.OUTPUT_INTENTS[i]);
+                int e = 1;
+                while (e < elements.length) {
+                    String key = elements[e++];
+                    if (e < elements.length) {
+                        String value = elements[e++];
+                        intent.putExtra(key, value);
+                    }
+                }
+            }
+        }
+        return intent;
     }
 }

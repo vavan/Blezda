@@ -46,14 +46,10 @@ public class ClientActivity extends Activity {
 
     private BluetoothGatt mConnectedGatt;
 
-//    private Handler mHandler = new Handler();
-
-    /* Client UI elements */
-    private TextView mLatestValue;
-//    private TextView mCurrentOffset;
 
     private final String SCAN_START = "pasa.ble.start";
     private final String SCAN_DONE = "pasa.ble.done";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,15 +58,21 @@ public class ClientActivity extends Activity {
 
         mDevice = null;
 
-        mLatestValue = (TextView) findViewById(R.id.latest_value);
-
         mBluetoothManager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
         mBluetoothAdapter = mBluetoothManager.getAdapter();
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(SCAN_START);
-        filter.addAction(SCAN_DONE);
-        registerReceiver(scanReceiver, filter);
+        IntentFilter scanFilter = new IntentFilter();
+        scanFilter.addAction(SCAN_START);
+        scanFilter.addAction(SCAN_DONE);
+        registerReceiver(scanReceiver, scanFilter);
+
+        IntentFilter inputFilter = new IntentFilter();
+        for (String s : DeviceProfile.INPUT_INTENTS) {
+            inputFilter.addAction(s);
+        }
+        registerReceiver(inputReceiver, inputFilter);
+
+
 
         Intent start = new Intent(SCAN_START);
         sendBroadcast(start);
@@ -117,32 +119,41 @@ public class ClientActivity extends Activity {
         }
     }
 
-    private byte command_emulation = 0;
-    private byte argument_emulation = 0;
+    private final BroadcastReceiver inputReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String packet = DeviceProfile.encode(intent);
+            Log.d(TAG, "OnSend Packet = " + packet);
 
-    /*
-     * Select a new time to set as the base offset
-     * on the GATT Server. Then write to the characteristic.
-     */
-    public void onUpdateClick(View v) {
-        if (mConnectedGatt != null) {
-
-            //*********************************************************************************
-            //Vova. Send command to the server
-            command_emulation += 1;
-            argument_emulation += 2;
 
             BluetoothGattCharacteristic characteristic = mConnectedGatt
                     .getService(DeviceProfile.SERVICE_UUID)
                     .getCharacteristic(DeviceProfile.CHARACTERISTIC_COMMAND_UUID);
-            byte[] value = {command_emulation, argument_emulation};
+            byte[] value = packet.getBytes();
             Log.d(TAG, "Writing value of size "+value.length);
             characteristic.setValue(value);
-
             mConnectedGatt.writeCharacteristic(characteristic);
-            //*********************************************************************************
         }
-    }
+    };
+
+
+    private final BroadcastReceiver scanReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (SCAN_START.equals(action)) {
+                startScan();
+            } else if (SCAN_DONE.equals(action)) {
+                Log.i(TAG, "Connecting to " + mDevice.getName());
+                /*
+                 * Make a connection with the device using the special LE-specific
+                 * connectGatt() method, passing in a callback for GATT events
+                 */
+                mConnectedGatt = mDevice.connectGatt(getApplicationContext(), false, mGattCallback);
+            }
+        }
+    };
+
 
 
     /*
@@ -194,7 +205,7 @@ public class ClientActivity extends Activity {
 
         @Override
         public void onScanFailed(int errorCode) {
-            Log.w(TAG, "LE Scan Failed: "+errorCode);
+            Log.w(TAG, "LE Scan Failed: " + errorCode);
         }
 
         private void processResult(ScanResult result) {
@@ -247,22 +258,17 @@ public class ClientActivity extends Activity {
                                          BluetoothGattCharacteristic characteristic,
                                          int status) {
             super.onCharacteristicRead(gatt, characteristic, status);
+            /*
             final byte command = DeviceProfile.getCoomand(characteristic);
             final byte argument = DeviceProfile.getArgument(characteristic);
-
+            */
             if (DeviceProfile.CHARACTERISTIC_COMMAND_UUID.equals(characteristic.getUuid())) {
-                Log.d(TAG, "1>" + command + ", " + argument + "<");
-
-//                mHandler.post(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        mLatestValue.setText(">" + command + ", " + argument + "<");
-//                    }
-//                });
+                Log.d(TAG, "1>" + characteristic.getStringValue(0));
 
                 //Register for further updates as notifications
                 gatt.setCharacteristicNotification(characteristic, true);
             }
+
 
 
         }
@@ -271,41 +277,23 @@ public class ClientActivity extends Activity {
         public void onCharacteristicChanged(BluetoothGatt gatt,
                                             BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicChanged(gatt, characteristic);
+            String packet = characteristic.getStringValue(0);
 
             //VOVA get update from server
             //*************************************************************************************
-            Log.i(TAG, "Notification of time characteristic changed on server.");
-            final byte command = DeviceProfile.getCoomand(characteristic);
-            final byte argument = DeviceProfile.getArgument(characteristic);
+            Log.i(TAG, "Notification characteristic changed on server.");
 
-            Log.d(TAG, "2>" + command + ", " + argument + "<");
+            Log.i(TAG, "Received packet = " + packet);
 
-//            mHandler.post(new Runnable() {
-//                @Override
-//                public void run() {
-//                    mLatestValue.setText(">" + command + ", " + argument + "<");
-//                }
-//            });
+            Intent intent = DeviceProfile.decode(packet);
+            if (intent != null) {
+                Log.d(TAG, "Broadcast " + intent.getAction());
+                sendBroadcast(intent);
+            }
             //*************************************************************************************
         }
     };
 
-    private final BroadcastReceiver scanReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (SCAN_START.equals(action)) {
-                startScan();
-            } else if (SCAN_DONE.equals(action)) {
-                Log.i(TAG, "Connecting to " + mDevice.getName());
-                /*
-                 * Make a connection with the device using the special LE-specific
-                 * connectGatt() method, passing in a callback for GATT events
-                 */
-                mConnectedGatt = mDevice.connectGatt(getApplicationContext(), false, mGattCallback);
-            }
-        }
-    };
 
 
 }

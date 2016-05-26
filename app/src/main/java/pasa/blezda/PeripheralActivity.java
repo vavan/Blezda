@@ -14,7 +14,10 @@ import android.bluetooth.le.AdvertiseCallback;
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertiseSettings;
 import android.bluetooth.le.BluetoothLeAdvertiser;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -42,6 +45,8 @@ public class PeripheralActivity extends Activity {
     private ArrayList<BluetoothDevice> mConnectedDevices;
     private ArrayAdapter<BluetoothDevice> mConnectedDevicesAdapter;
 
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -53,12 +58,15 @@ public class PeripheralActivity extends Activity {
                 android.R.layout.simple_list_item_1, mConnectedDevices);
         list.setAdapter(mConnectedDevicesAdapter);
 
-        /*
-         * Bluetooth in Android 4.3+ is accessed via the BluetoothManager, rather than
-         * the old static BluetoothAdapter.getInstance()
-         */
+
         mBluetoothManager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
         mBluetoothAdapter = mBluetoothManager.getAdapter();
+
+        IntentFilter inputFilter = new IntentFilter();
+        for (String s : DeviceProfile.INPUT_INTENTS) {
+            inputFilter.addAction(s);
+        }
+        registerReceiver(inputReceiver, inputFilter);
     }
 
     @Override
@@ -134,25 +142,26 @@ public class PeripheralActivity extends Activity {
      * Terminate the server and any running callbacks
      */
     private void shutdownServer() {
-        mHandler.removeCallbacks(mNotifyRunnable);
-
         if (mGattServer == null) return;
 
         mGattServer.close();
     }
 
-    private Runnable mNotifyRunnable = new Runnable() {
+
+    private final BroadcastReceiver inputReceiver = new BroadcastReceiver() {
         @Override
-        public void run() {
-            //VOVA
-            //*********************************************************************************
-            // Emulation - send updated data to client every 2 sec
-            argument += 10;
-            notifyConnectedDevices();
-            mHandler.postDelayed(this, 2000);
-            //*********************************************************************************
+        public void onReceive(Context context, Intent intent) {
+        String packet = DeviceProfile.encode(intent);
+        Log.d(TAG, "OnSend Packet = " + packet);
+        for (BluetoothDevice device : mConnectedDevices) {
+            BluetoothGattCharacteristic readCharacteristic = mGattServer.getService(DeviceProfile.SERVICE_UUID)
+                    .getCharacteristic(DeviceProfile.CHARACTERISTIC_COMMAND_UUID);
+            readCharacteristic.setValue(packet);
+            mGattServer.notifyCharacteristicChanged(device, readCharacteristic, false);
+        }
         }
     };
+
 
     /*
      * Callback handles all incoming requests from GATT clients.
@@ -174,6 +183,7 @@ public class PeripheralActivity extends Activity {
             }
         }
 
+
         @Override
         public void onCharacteristicReadRequest(BluetoothDevice device,
                                                 int requestId,
@@ -183,20 +193,13 @@ public class PeripheralActivity extends Activity {
             Log.i(TAG, "onCharacteristicReadRequest " + characteristic.getUuid().toString());
 
             if (DeviceProfile.CHARACTERISTIC_COMMAND_UUID.equals(characteristic.getUuid())) {
+                byte[] a = {0};
                 mGattServer.sendResponse(device,
                         requestId,
                         BluetoothGatt.GATT_SUCCESS,
                         0,
-                        getStoredValue());
+                        a);
             }
-
-//            if (DeviceProfile.CHARACTERISTIC_OFFSET_UUID.equals(characteristic.getUuid())) {
-//                mGattServer.sendResponse(device,
-//                        requestId,
-//                        BluetoothGatt.GATT_SUCCESS,
-//                        0,
-//                        DeviceProfile.bytesFromInt(mTimeOffset));
-//            }
 
             /*
              * Unless the characteristic supports WRITE_NO_RESPONSE,
@@ -218,10 +221,16 @@ public class PeripheralActivity extends Activity {
                                                  int offset,
                                                  byte[] value) {
             super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value);
+            String packet = new String(value);
             Log.i(TAG, "onCharacteristicWriteRequest "+characteristic.getUuid().toString());
+            Log.i(TAG, "onReceive "+packet);
 
             if (DeviceProfile.CHARACTERISTIC_COMMAND_UUID.equals(characteristic.getUuid())) {
-                setStoredValue(value[0], value[1]);
+                Intent intent = DeviceProfile.decode(packet);
+                if (intent != null) {
+                    Log.d(TAG, "Broadcast " + intent.getAction());
+                    sendBroadcast(intent);
+                }
 
                 if (responseNeeded) {
                     mGattServer.sendResponse(device,
@@ -231,14 +240,7 @@ public class PeripheralActivity extends Activity {
                             value);
                 }
 
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(PeripheralActivity.this, "Time Offset Updated", Toast.LENGTH_SHORT).show();
-                    }
-                });
-
-                notifyConnectedDevices();
+//                notifyConnectedDevices();
             }
         }
     };
@@ -313,49 +315,12 @@ public class PeripheralActivity extends Activity {
                 }
 
                 //Trigger our periodic notification once devices are connected
-                mHandler.removeCallbacks(mNotifyRunnable);
-                if (!mConnectedDevices.isEmpty()) {
-                    mHandler.post(mNotifyRunnable);
-                }
+//                mHandler.removeCallbacks(mNotifyRunnable);
+//                if (!mConnectedDevices.isEmpty()) {
+//                    mHandler.post(mNotifyRunnable);
+//                }
             }
         });
     }
 
-    /* Storage and access to local characteristic data */
-
-    private void notifyConnectedDevices() {
-        for (BluetoothDevice device : mConnectedDevices) {
-            BluetoothGattCharacteristic readCharacteristic = mGattServer.getService(DeviceProfile.SERVICE_UUID)
-                    .getCharacteristic(DeviceProfile.CHARACTERISTIC_COMMAND_UUID);
-            readCharacteristic.setValue(getStoredValue());
-            mGattServer.notifyCharacteristicChanged(device, readCharacteristic, false);
-        }
-    }
-
-    private Object mLock = new Object();
-
-//    private int mTimeOffset;
-
-    private byte command;
-    private byte argument;
-
-
-    private byte[] getStoredValue() {
-        synchronized (mLock) {
-            byte[] pack = {command, argument};
-            return pack;
-        }
-    }
-
-    private void setStoredValue(byte command, byte argument) {
-        synchronized (mLock) {
-            //VOVA
-            //*********************************************************************************
-            // Data came from client
-
-            this.command = command;
-            this.argument = argument;
-            //*********************************************************************************
-        }
-    }
 }
