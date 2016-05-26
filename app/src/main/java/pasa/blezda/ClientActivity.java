@@ -36,26 +36,21 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
-/**
- * Dave Smith
- * Date: 11/13/14
- * ClientActivity
- */
 public class ClientActivity extends Activity {
     private static final String TAG = "ClientActivity";
 
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
 
-    private SparseArray<BluetoothDevice> mDevices;
+    private BluetoothDevice mDevice;
 
     private BluetoothGatt mConnectedGatt;
 
-    private Handler mHandler = new Handler();
+//    private Handler mHandler = new Handler();
 
     /* Client UI elements */
     private TextView mLatestValue;
-    private TextView mCurrentOffset;
+//    private TextView mCurrentOffset;
 
     private final String SCAN_START = "pasa.ble.start";
     private final String SCAN_DONE = "pasa.ble.done";
@@ -65,18 +60,12 @@ public class ClientActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_client);
 
-        mLatestValue = (TextView) findViewById(R.id.latest_value);
-//        mCurrentOffset = (TextView) findViewById(R.id.offset_date);
-//        updateDateText(0);
+        mDevice = null;
 
-        /*
-         * Bluetooth in Android 4.3+ is accessed via the BluetoothManager, rather than
-         * the old static BluetoothAdapter.getInstance()
-         */
+        mLatestValue = (TextView) findViewById(R.id.latest_value);
+
         mBluetoothManager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
         mBluetoothAdapter = mBluetoothManager.getAdapter();
-
-        mDevices = new SparseArray<BluetoothDevice>();
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(SCAN_START);
@@ -212,7 +201,7 @@ public class ClientActivity extends Activity {
             BluetoothDevice device = result.getDevice();
             Log.i(TAG, "New LE Device: " + device.getName() + " @ " + result.getRssi());
             //Add it to the collection
-            mDevices.put(device.hashCode(), device);
+            mDevice = device;
 
             stopScan();
 
@@ -262,12 +251,14 @@ public class ClientActivity extends Activity {
             final byte argument = DeviceProfile.getArgument(characteristic);
 
             if (DeviceProfile.CHARACTERISTIC_COMMAND_UUID.equals(characteristic.getUuid())) {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        mLatestValue.setText(">" + command + ", " + argument + "<");
-                    }
-                });
+                Log.d(TAG, "1>" + command + ", " + argument + "<");
+
+//                mHandler.post(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        mLatestValue.setText(">" + command + ", " + argument + "<");
+//                    }
+//                });
 
                 //Register for further updates as notifications
                 gatt.setCharacteristicNotification(characteristic, true);
@@ -287,12 +278,14 @@ public class ClientActivity extends Activity {
             final byte command = DeviceProfile.getCoomand(characteristic);
             final byte argument = DeviceProfile.getArgument(characteristic);
 
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    mLatestValue.setText(">" + command + ", " + argument + "<");
-                }
-            });
+            Log.d(TAG, "2>" + command + ", " + argument + "<");
+
+//            mHandler.post(new Runnable() {
+//                @Override
+//                public void run() {
+//                    mLatestValue.setText(">" + command + ", " + argument + "<");
+//                }
+//            });
             //*************************************************************************************
         }
     };
@@ -304,13 +297,12 @@ public class ClientActivity extends Activity {
             if (SCAN_START.equals(action)) {
                 startScan();
             } else if (SCAN_DONE.equals(action)) {
-                BluetoothDevice device = mDevices.valueAt(0);
-                Log.i(TAG, "Connecting to " + device.getName());
+                Log.i(TAG, "Connecting to " + mDevice.getName());
                 /*
                  * Make a connection with the device using the special LE-specific
                  * connectGatt() method, passing in a callback for GATT events
                  */
-                mConnectedGatt = device.connectGatt(getApplicationContext(), false, mGattCallback);
+                mConnectedGatt = mDevice.connectGatt(getApplicationContext(), false, mGattCallback);
             }
         }
     };
